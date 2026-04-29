@@ -64,7 +64,7 @@ If you encounter an error stating `running scripts is disabled on this system`:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Remove-ReasonLabs.ps1 -Execute
 ```
 
-## What the script does (seven steps)
+## What the script does (eight steps)
 
 1. **Scheduled tasks** — finds every task whose name matches
    `Reason / RAV / rsEngine`, applies `takeown` + `icacls` to break ACL
@@ -85,13 +85,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Remove-ReasonLabs.ps1 -Exe
    - `HKCU\SOFTWARE\ReasonLabs`
    - `Reason Cybersecurity` keys
    - Any Uninstall-list entries whose DisplayName matches `RAV / ReasonLabs`
-7. **Leftover scan** — re-checks everything and lists what survived
+7. **AppX / UWP packages** — removes any installed AppX package whose
+   `Name` / `Publisher` matches `ReasonLabs / RAV / Reason`
+   (`Remove-AppxPackage -AllUsers`), and the matching provisioned packages
+   (`Remove-AppxProvisionedPackage`) so they don't get reinstalled for new
+   users. This is what catches the "files are gone but it's still in the
+   installed apps list" case — UWP packages register independently of the
+   filesystem.
+8. **Leftover scan** — re-checks everything (folders, services, tasks,
+   registry, AppX, provisioned AppX) and lists what survived
 
 A full log is written to `ReasonLabs-Removal-yyyyMMdd-HHmmss.log`.
 
 ## If removal is incomplete
 
-If Step 7 still lists leftovers, work through this order:
+If Step 8 still lists leftovers, work through this order:
 
 1. **Boot into Safe Mode**
    (hold Shift → Restart → Troubleshoot → Advanced Options → Startup Settings → press 4)
@@ -113,6 +121,10 @@ If Step 7 still lists leftovers, work through this order:
 - The script only acts on names that explicitly match
   `ReasonLabs / RAV / rsEngine / Reason Cybersecurity` — other software is
   not touched.
+- The AppX step matches package `Name` / `Publisher` against
+  `ReasonLabs|RAV|Reason`. Run DryRun first and confirm the listed packages
+  before using `-Execute`, in case an unrelated app's name happens to share
+  a substring.
 
 ## Sources
 

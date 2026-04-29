@@ -282,6 +282,39 @@ foreach ($root in $uninstallRoots) {
     }
 }
 
+# ---------- Step 6.5: Remove UWP / AppX packages ----------
+Write-Log "" "INFO"
+Write-Log "-- Step 6.5: Removing AppX / UWP packages --" "INFO"
+
+$appxMatch = { $_.Name -match 'ReasonLabs|RAV|Reason' -or $_.Publisher -match 'Reason' }
+
+$installedAppx = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object $appxMatch
+if (-not $installedAppx) {
+    Write-Log "No installed AppX packages match ReasonLabs/RAV." "OK"
+} else {
+    foreach ($pkg in $installedAppx) {
+        Write-Log "Found AppX: $($pkg.PackageFullName)" "WARN"
+        $pfn = $pkg.PackageFullName
+        Invoke-Action "Remove-AppxPackage $pfn (-AllUsers)" {
+            Remove-AppxPackage -Package $pfn -AllUsers -ErrorAction Stop
+        }
+    }
+}
+
+$provAppxMatch = { $_.DisplayName -match 'ReasonLabs|RAV|Reason' -or $_.PublisherId -match 'Reason' }
+$provisionedAppx = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object $provAppxMatch
+if (-not $provisionedAppx) {
+    Write-Log "No provisioned AppX packages match ReasonLabs/RAV." "OK"
+} else {
+    foreach ($pkg in $provisionedAppx) {
+        Write-Log "Found provisioned AppX: $($pkg.DisplayName) ($($pkg.PackageName))" "WARN"
+        $pn = $pkg.PackageName
+        Invoke-Action "Remove-AppxProvisionedPackage $pn" {
+            Remove-AppxProvisionedPackage -Online -PackageName $pn -ErrorAction Stop | Out-Null
+        }
+    }
+}
+
 # ---------- Step 7: Leftover scan ----------
 Write-Log "" "INFO"
 Write-Log "-- Step 7: Leftover check --" "INFO"
@@ -292,13 +325,17 @@ $leftTasks    = Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {
     $_.TaskName -match 'Reason|RAV|rsEngine'
 }
 $leftKeys = $RegistryKeys | Where-Object { Test-Path $_ }
+$leftAppx = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object $appxMatch
+$leftProvAppx = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object $provAppxMatch
 
-if ($leftFolders -or $leftServices -or $leftTasks -or $leftKeys) {
+if ($leftFolders -or $leftServices -or $leftTasks -or $leftKeys -or $leftAppx -or $leftProvAppx) {
     Write-Log "Leftovers detected. Consider rerunning in Safe Mode:" "WARN"
     $leftFolders  | ForEach-Object { Write-Log "  Folder:   $_"  "WARN" }
     $leftServices | ForEach-Object { Write-Log "  Service:  $_"    "WARN" }
     $leftTasks    | ForEach-Object { Write-Log "  Task:     $($_.TaskPath)$($_.TaskName)" "WARN" }
     $leftKeys     | ForEach-Object { Write-Log "  RegKey:   $_"    "WARN" }
+    $leftAppx     | ForEach-Object { Write-Log "  AppX:     $($_.PackageFullName)" "WARN" }
+    $leftProvAppx | ForEach-Object { Write-Log "  ProvAppX: $($_.DisplayName) ($($_.PackageName))" "WARN" }
 } else {
     Write-Log "No ReasonLabs leftovers detected." "OK"
 }
